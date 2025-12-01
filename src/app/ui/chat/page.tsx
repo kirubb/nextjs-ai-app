@@ -15,6 +15,15 @@ export default function Chat() {
     }
 
 
+//     [
+//   {
+//     "id": "user-1",
+//     "role": "user|system|assistant",
+//     "parts": [{type:"text",
+//              text:"xyz"}]
+//   },   
+//]
+
   return ( 
     <div className="flex flex-col w-full max-w-md py-24 mx-auto stretch">
       {error && <div className="text-red-500 mb-4">{error.message}</div>}
