@@ -1,24 +1,17 @@
 "use client";
 
-import { useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
-import type { ChatMessage } from "@/app/api/tools/route";
+import { useState } from "react";
+import type { ChatMessage } from "@/app/api/multiple-tools/route";
 
 export default function MultipleToolsChatPage() {
   const [input, setInput] = useState("");
-
   const { messages, sendMessage, status, error, stop } = useChat<ChatMessage>({
     transport: new DefaultChatTransport({
       api: "/api/multiple-tools",
     }),
   });
-
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    sendMessage({ text: input });
-    setInput("");
-  };
 
   return (
     <div className="flex flex-col w-full max-w-md py-24 mx-auto stretch">
@@ -34,12 +27,72 @@ export default function MultipleToolsChatPage() {
               case "text":
                 return (
                   <div
-                    key={`${message.id}-${index}`}
+                    key={`${message.id}-text-${index}`}
                     className="whitespace-pre-wrap"
                   >
                     {part.text}
                   </div>
                 );
+
+              case "tool-getLocation":
+                switch (part.state) {
+                  case "input-streaming":
+                    return (
+                      <div
+                        key={`${message.id}-getLocation-${index}`}
+                        className="bg-zinc-800/50 border border-zinc-700 p-2 rounded mt-1 mb-2"
+                      >
+                        <div className="text-sm text-zinc-500">
+                          📍 Receiving location request...
+                        </div>
+                        <pre className="text-xs text-zinc-600 mt-1">
+                          {JSON.stringify(part.input, null, 2)}
+                        </pre>
+                      </div>
+                    );
+                  case "input-available":
+                    return (
+                      <div
+                        key={`${message.id}-getLocation-${index}`}
+                        className="bg-zinc-800/50 border border-zinc-700 p-2 rounded mt-1 mb-2"
+                      >
+                        <div className="text-sm text-zinc-400">
+                          📍 Getting location for {part.input.name}...
+                        </div>
+                      </div>
+                    );
+
+                  case "output-available":
+                    return (
+                      <div
+                        key={`${message.id}-getLocation-${index}`}
+                        className="bg-zinc-800/50 border border-zinc-700 p-2 rounded mt-1 mb-2"
+                      >
+                        <div className="text-sm text-zinc-400">
+                          📍 Location found
+                        </div>
+                        <div className="text-sm text-zinc-300">
+                          {part.output}
+                        </div>
+                      </div>
+                    );
+
+                  case "output-error":
+                    return (
+                      <div
+                        key={`${message.id}-getLocation-${index}`}
+                        className="bg-zinc-800/50 border border-zinc-700 p-2 rounded mt-1 mb-2"
+                      >
+                        <div className="text-sm text-red-400">
+                          Error: {part.errorText}
+                        </div>
+                      </div>
+                    );
+
+                  default:
+                    return null;
+                }
+
               case "tool-getWeather":
                 switch (part.state) {
                   case "input-streaming":
@@ -56,7 +109,6 @@ export default function MultipleToolsChatPage() {
                         </pre>
                       </div>
                     );
-
                   case "input-available":
                     return (
                       <div
@@ -73,7 +125,7 @@ export default function MultipleToolsChatPage() {
                     return (
                       <div
                         key={`${message.id}-getWeather-${index}`}
-                        className="bg-zinc-800/50 border border-zinc-700 p-2 rounded mt-1 mb-2"
+                        className="bg-zinc-800/50 border border-zinc-700 p-2 rounded mt-1"
                       >
                         <div className="text-sm text-zinc-400">🌤️ Weather</div>
                         <div className="text-sm text-zinc-300">
@@ -97,12 +149,14 @@ export default function MultipleToolsChatPage() {
                   default:
                     return null;
                 }
+
               default:
                 return null;
             }
           })}
         </div>
       ))}
+
       {(status === "submitted" || status === "streaming") && (
         <div className="mb-4">
           <div className="flex items-center gap-2">
@@ -112,18 +166,26 @@ export default function MultipleToolsChatPage() {
       )}
 
       <form
-        onSubmit={handleSubmit}
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (input.trim()) {
+            sendMessage({ text: input });
+            setInput("");
+          }
+        }}
         className="fixed bottom-0 w-full max-w-md mx-auto left-0 right-0 p-4 bg-zinc-50 dark:bg-zinc-950 border-t border-zinc-200 dark:border-zinc-800 shadow-lg"
       >
         <div className="flex gap-2">
           <input
-            className="flex-1 dark:bg-zinc-800 p-2 border border-zinc-300 dark:border-zinc-700 rounded shadow-xl"
+            className="flex-1 dark:bg-zinc-800 p-2 border border-zinc-300 dark:border-zinc-700 rounded shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="How can I help you?"
+            disabled={status !== "ready"}
           />
           {status === "submitted" || status === "streaming" ? (
             <button
+              type="button"
               onClick={stop}
               className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 transition-colors"
             >
@@ -133,7 +195,7 @@ export default function MultipleToolsChatPage() {
             <button
               type="submit"
               className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              disabled={status !== "ready"}
+              disabled={!input.trim()}
             >
               Send
             </button>
@@ -143,121 +205,3 @@ export default function MultipleToolsChatPage() {
     </div>
   );
 }
-
-// Replace the messages rendering with below for all tool call states in the UI
-
-// {messages.map((message) => (
-//   <div key={message.id} className="mb-4">
-//     <div className="font-semibold">
-//       {message.role === "user" ? "You:" : "AI:"}
-//     </div>
-//     {message.parts.map((part, index) => {
-//       switch (part.type) {
-//         case "text":
-//           return (
-//             <div
-//               key={`${message.id}-text-${index}`}
-//               className="whitespace-pre-wrap"
-//             >
-//               {part.text}
-//             </div>
-//           );
-
-//         case "tool-getLocation":
-//           return (
-//             <div key={`${message.id}-getLocation-${index}`} className="space-y-1 mt-1">
-//               {/* Always show input-streaming as passed state */}
-//               {(part.state === "input-streaming" || part.state === "input-available" || part.state === "output-available" || part.state === "output-error") && (
-//                 <div className="bg-zinc-800/50 border border-zinc-700 p-2 rounded opacity-50">
-//                   <div className="text-sm text-zinc-500">
-//                     📍 [STATE: input-streaming] Receiving location request...
-//                   </div>
-//                   <pre className="text-xs text-zinc-600 mt-1">
-//                     {JSON.stringify(part.input || {}, null, 2)}
-//                   </pre>
-//                 </div>
-//               )}
-
-//               {/* Show input-available if we're at or past that state */}
-//               {(part.state === "input-available" || part.state === "output-available" || part.state === "output-error") && (
-//                 <div className={`bg-zinc-800/50 border border-zinc-700 p-2 rounded ${part.state === "input-available" ? "" : "opacity-70"}`}>
-//                   <div className="text-sm text-zinc-400">
-//                     📍 [STATE: input-available] Getting location for {part.input.name}...
-//                   </div>
-//                 </div>
-//               )}
-
-//               {/* Show output-available if we're at that state */}
-//               {part.state === "output-available" && (
-//                 <div className="bg-zinc-800/50 border border-zinc-700 p-2 rounded">
-//                   <div className="text-sm text-zinc-400">
-//                     📍 [STATE: output-available] Location found
-//                   </div>
-//                   <div className="text-sm text-zinc-300">
-//                     {part.output}
-//                   </div>
-//                 </div>
-//               )}
-
-//               {/* Show output-error if we're at that state */}
-//               {part.state === "output-error" && (
-//                 <div className="bg-zinc-800/50 border border-zinc-700 p-2 rounded">
-//                   <div className="text-sm text-red-400">
-//                     [STATE: output-error] Error: {part.errorText}
-//                   </div>
-//                 </div>
-//               )}
-//             </div>
-//           );
-
-//         case "tool-getWeather":
-//           return (
-//             <div key={`${message.id}-getWeather-${index}`} className="space-y-1 mt-1">
-//               {/* Always show input-streaming as passed state */}
-//               {(part.state === "input-streaming" || part.state === "input-available" || part.state === "output-available" || part.state === "output-error") && (
-//                 <div className="bg-zinc-800/50 border border-zinc-700 p-2 rounded opacity-50">
-//                   <div className="text-sm text-zinc-500">
-//                     🌤️ [STATE: input-streaming] Receiving weather request...
-//                   </div>
-//                   <pre className="text-xs text-zinc-600 mt-1">
-//                     {JSON.stringify(part.input || {}, null, 2)}
-//                   </pre>
-//                 </div>
-//               )}
-
-//               {/* Show input-available if we're at or past that state */}
-//               {(part.state === "input-available" || part.state === "output-available" || part.state === "output-error") && (
-//                 <div className={`bg-zinc-800/50 border border-zinc-700 p-2 rounded ${part.state === "input-available" ? "" : "opacity-70"}`}>
-//                   <div className="text-sm text-zinc-400">
-//                     🌤️ [STATE: input-available] Getting weather for {part.input.city}...
-//                   </div>
-//                 </div>
-//               )}
-
-//               {/* Show output-available if we're at that state */}
-//               {part.state === "output-available" && (
-//                 <div className="bg-zinc-800/50 border border-zinc-700 p-2 rounded">
-//                   <div className="text-sm text-zinc-400">🌤️ [STATE: output-available] Weather</div>
-//                   <div className="text-sm text-zinc-300">
-//                     <div>{part.output}</div>
-//                   </div>
-//                 </div>
-//               )}
-
-//               {/* Show output-error if we're at that state */}
-//               {part.state === "output-error" && (
-//                 <div className="bg-zinc-800/50 border border-zinc-700 p-2 rounded">
-//                   <div className="text-sm text-red-400">
-//                     [STATE: output-error] Error: {part.errorText}
-//                   </div>
-//                 </div>
-//               )}
-//             </div>
-//           );
-
-//         default:
-//           return null;
-//       }
-//     })}
-//   </div>
-// ))}
